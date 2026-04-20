@@ -1,0 +1,76 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated-client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model OtpVerification {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  otp       String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+}
+
+model PasswordReset {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  token     String   @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+}
+
+model User {
+  id               Int            @id @default(autoincrement())
+  email            String         @unique
+  password         String
+  confirmPassword  String
+  credits          Int            @default(0)
+  totalCredits     Int            @default(0)
+  planName         String?
+  stripeCustomerId String?        @unique
+  subscriptions    Subscription[]
+}
+
+model Product {
+  id          String   @id // Stripe Product ID (e.g., prod_...)
+  name        String
+  description String?
+  prices      Price[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Price {
+  id            String         @id // Stripe Price ID (e.g., price_...)
+  unit_amount   Int // Price in cents (e.g., 5000 for $50.00)
+  currency      String // e.g., "usd"
+  type          String? // "recurring" or "one_time"
+  interval      String? // "month", "year", etc.
+  productId     String
+  product       Product        @relation(fields: [productId], references: [id])
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id               String   @id // Stripe Subscription ID (e.g., sub_...)
+  userId           Int
+  user             User     @relation(fields: [userId], references: [id])
+  priceId          String
+  price            Price    @relation(fields: [priceId], references: [id])
+  status           String? // "active", "canceled", etc.
+  currentPeriodEnd DateTime
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
