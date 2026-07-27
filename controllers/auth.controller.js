@@ -23,35 +23,43 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-passport.use(new GoogleStrategy.Strategy({
-  clientID: process.env.GOOGLE_CLIENT_ID?.trim(),
-  clientSecret: process.env.GOOGLE_CLIENT_SECRET?.trim(),
-  callbackURL: process.env.CALLBACK_URL?.trim(),
-}, async (accessToken, refreshToken, profile, done) => {
-  try {
-    const email = profile.emails[0].value;
-    let user = await prisma.user.findUnique({ where: { email } });
+const googleClientId = process.env.GOOGLE_CLIENT_ID?.trim();
+const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
 
-    if (!user) {
-      // Create new user if they don't exist
-      const randomPassword = crypto.randomBytes(16).toString('hex');
-      const hashedPassword = await bcrypt.hash(randomPassword, 10);
-      user = await prisma.user.create({
-        data: {
-          email,
-          password: hashedPassword,
-          confirmPassword: hashedPassword, // Maintaining existing pattern
-          credits: 0,
-          totalCredits: 0
-        }
-      });
+if (googleClientId && googleClientSecret) {
+  passport.use(new GoogleStrategy.Strategy({
+    clientID: googleClientId,
+    clientSecret: googleClientSecret,
+    callbackURL: process.env.CALLBACK_URL?.trim() || "http://localhost:8000/api/v1/auth/google/callback",
+  }, async (accessToken, refreshToken, profile, done) => {
+    try {
+      const email = profile.emails[0].value;
+      let user = await prisma.user.findUnique({ where: { email } });
+
+      if (!user) {
+        // Create new user if they don't exist
+        const randomPassword = crypto.randomBytes(16).toString('hex');
+        const hashedPassword = await bcrypt.hash(randomPassword, 10);
+        user = await prisma.user.create({
+          data: {
+            email,
+            password: hashedPassword,
+            confirmPassword: hashedPassword, // Maintaining existing pattern
+            credits: 0,
+            totalCredits: 0
+          }
+        });
+      }
+
+      return done(null, user);
+    } catch (error) {
+      return done(error, null);
     }
+  }));
+} else {
+  console.warn("⚠️ Google OAuth credentials not found in environment variables. Google login strategy is disabled.");
+}
 
-    return done(null, user);
-  } catch (error) {
-    return done(error, null);
-  }
-}));
 
 const signUpController = async (req, res) => {
   try {
@@ -123,9 +131,11 @@ const verifyEmailController = async (req, res) => {
           expiresAt: new Date(Date.now() + 10 * 60 * 1000)
         }
       });
+      const isDevMode = process.env.NODE_ENV !== 'production';
       return res.status(200).json({ 
         success: true, 
-        message: "OTP initialized (Check server console for code)" 
+        message: isDevMode ? `OTP for ${email} is ${otp} (dev mode, email not configured)` : "OTP initialized (Check server console for code)",
+        otp: isDevMode ? otp.toString() : undefined
       });
     };
 
@@ -204,27 +214,32 @@ const verifyOTPController = async (req, res) => {
 }
 
 const loginController = async (req, res) => {
-  const { error, value } = loginValidation.validate(req.body);
+  try {
+    const { error, value } = loginValidation.validate(req.body);
 
-  if (error) {
-    return res.status(400).json({ message: error.details[0].message });
+    if (error) {
+      return res.status(400).json({ message: error.details[0].message });
+    }
+
+    const { email, password } = value;
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      return res.status(400).json({ success: false, message: "User not found" });
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(400).json({ success: false, message: "Invalid password" });
+    }
+
+    const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: "7d" });
+
+    return res.status(200).json({ success: true, message: "Login Successful", user, token });
+  } catch (err) {
+    console.error("Login Error:", err);
+    return res.status(500).json({ success: false, message: "Internal Server Error", error: err.message });
   }
-
-  const { email, password } = value;
-
-  const user = await prisma.user.findUnique({ where: { email } });
-  if (!user) {
-    return res.status(400).json({ success: false, message: "User not found" });
-  }
-
-  const isPasswordValid = await bcrypt.compare(password, user.password);
-  if (!isPasswordValid) {
-    return res.status(400).json({ success: false, message: "Invalid password" });
-  }
-
-  const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: "7d" });
-
-  return res.status(200).json({ success: true, message: "Login Successful", user, token });
 }
 
 const googleLoginController = (req, res, next) => {
@@ -257,8 +272,9 @@ const verifyRecaptchaController = async (req, res) => {
     const isLocal = req.headers.host && (req.headers.host.includes("localhost") || req.headers.host.includes("127.0.0.1"));
 
     // Development bypass for localhost
-    if (isLocal && (!token || token === "")) {
-      return res.status(200).json({ success: true, message: "Dev Bypass" });
+    if (isLocal) {
+      console.log("🔄 Dev Bypass: Bypassing Google reCAPTCHA check on localhost.");
+      return res.status(200).json({ success: true, score: 0.9, message: "Dev Bypass" });
     }
 
     if (!token) return res.status(400).json({ success: false, message: "Token is required" });
@@ -272,7 +288,7 @@ const verifyRecaptchaController = async (req, res) => {
     const verifyResp = await fetch(verificationURL, { method: "POST" });
     const verifyData = await verifyResp.json();
 
-    if (verifyData.success || isLocal) {
+    if (verifyData.success) {
       return res.status(200).json({ success: true, score: verifyData.score || 0.9 });
     } else {
       return res.status(400).json({ success: false, message: "Verification failed" });

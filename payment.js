@@ -4,7 +4,7 @@ import { prisma } from './config/prisma.js';
 
 dotenv.config();
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "sk_test_placeholder");
 
 async function runPaymentSimulation() {
   try {
@@ -13,7 +13,7 @@ async function runPaymentSimulation() {
       name: "Diamond Plan",
     });
 
-    // 2. Create Price
+    // 2. Cnotreate Price
     const price = await stripe.prices.create({
       unit_amount: 5000,
       currency: "usd",

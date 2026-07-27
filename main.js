@@ -7,6 +7,8 @@ import rateLimit from "express-rate-limit";
 import authRouter from "./routes/auth.route.js";
 import paymentRouter from "./routes/payment.route.js";
 import creditsRouter from "./routes/credits.route.js";
+import propertyRouter from "./routes/property.route.js";
+import aiRouter from "./routes/ai.route.js";
 import { handlePaymentWebhook } from "./controllers/payment.controller.js";
 import passport from "passport";
 import session from "express-session";
@@ -34,7 +36,7 @@ app.use(express.json());   // for parsing json data
 app.use(express.urlencoded({ extended: true }));   // for parsing form data
 app.use(rateLimiter);
 app.use(session({
-  secret: process.env.SESSION_SECRET,
+  secret: process.env.SESSION_SECRET || "sres_session_secret_fallback_key",
   resave: false,
   saveUninitialized: false,
   cookie: { secure: false }
@@ -44,6 +46,8 @@ app.use(passport.session());
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/payment", paymentRouter);
 app.use("/api/v1/credits", creditsRouter);
+app.use("/api/v1/properties", propertyRouter);
+app.use("/api/v1/ai", aiRouter);
 
 // Stripe webhook endpoint (no rate limiting)
 app.post("/api/v1/webhook/stripe", express.raw({type: 'application/json'}), handlePaymentWebhook);

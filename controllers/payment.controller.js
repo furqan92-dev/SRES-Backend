@@ -1,7 +1,7 @@
 import Stripe from "stripe";
 import { prisma } from "../config/prisma.js";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "sk_test_placeholder");
 
 export const createPaymentIntent = async (req, res) => {
   try {
@@ -261,20 +261,62 @@ export const createSubscription = async (req, res) => {
       console.log("Payment method already attached or simulation error:", err.message);
     }
 
-    // Always fetch Price from Prisma DB
-    const existingPriceDb = await prisma.price.findFirst({
+    // Convert amount to cents (use provided amount as authoritative)
+    const amountStr = amount.toString().replace(/,/g, '');
+    const amountInCents = parseInt(amountStr) * 100;
+
+    // Always try to fetch Price from Prisma DB
+    let existingPriceDb = await prisma.price.findFirst({
       where: {
         product: { name: `${planName} Plan` },
         interval: interval
       }
     });
 
-    if (!existingPriceDb) {
-      return res.status(400).json({ success: false, message: `Price configuration not found in DB for ${planName} (${interval})` });
-    }
+    let usePriceId;
 
-    const usePriceId = existingPriceDb.id;
-    console.log(`Found existing price in DB for ${planName} ${interval}: ${usePriceId}`);
+    if (!existingPriceDb) {
+      // If no Price is found in DB, create the Product/Price in Stripe and persist to Prisma
+      try {
+        console.log(`No price found in DB for ${planName} (${interval}). Creating product/price in Stripe...`);
+        const product = await stripe.products.create({ name: `${planName} Plan` });
+        const price = await stripe.prices.create({
+          unit_amount: amountInCents,
+          currency: 'usd',
+          recurring: { interval: interval },
+          product: product.id,
+        });
+
+        // Persist Product and Price in Prisma
+        await prisma.product.create({
+          data: {
+            id: product.id,
+            name: product.name || `${planName} Plan`,
+            description: product.description || ''
+          }
+        });
+
+        await prisma.price.create({
+          data: {
+            id: price.id,
+            unit_amount: price.unit_amount,
+            currency: price.currency,
+            type: price.type || 'recurring',
+            interval: interval,
+            productId: product.id
+          }
+        });
+
+        usePriceId = price.id;
+        console.log(`Created and saved Stripe price ${usePriceId} for ${planName} (${interval})`);
+      } catch (err) {
+        console.error('Error creating price in Stripe or saving to DB:', err.message);
+        return res.status(500).json({ success: false, message: 'Price configuration missing and creation failed. Check server logs.' });
+      }
+    } else {
+      usePriceId = existingPriceDb.id;
+      console.log(`Found existing price in DB for ${planName} ${interval}: ${usePriceId}`);
+    }
 
     const subscription = await stripe.subscriptions.create({
       customer: customerId,

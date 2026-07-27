@@ -39,6 +39,36 @@ model User {
   planName        String?
   stripeCustomerId String? @unique
   subscriptions   Subscription[]
+  properties      Property[]
+}
+
+model Property {
+  id                 Int      @id @default(autoincrement())
+  purpose            String   // "Sell" or "Rent"
+  category           String   // "Home" or "Plots" or "Commercial"
+  propertyType       String   // e.g. "House", "Flat"
+  city               String
+  location           String
+  areaSize           Float
+  areaUnit           String   // e.g. "Sq. Ft.", "Marla"
+  price              Float
+  currency           String   // e.g. "PKR", "USD"
+  installment        Boolean  @default(false)
+  readyForPossession Boolean  @default(false)
+  bedrooms           String?  // Optional
+  bathrooms          String?  // Optional
+  amenities          String[] // Postgres scalar list/array of string
+  title              String
+  description        String
+  images             String[] // list of base64 or image paths/URLs
+  mobile             String
+  landline           String?
+  userId             Int
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  boostScore         Int      @default(0)
+  isFeatured         Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 }
 
 model Product {

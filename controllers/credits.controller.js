@@ -90,3 +90,49 @@ export const shareCredits = async (req, res) => {
   }
 };
 
+// Deduct 1 credit per call reveal (1 Call = 1 Credit)
+export const trackCall = async (req, res) => {
+  try {
+    const { propertyId } = req.body;
+    let userId = req.user ? req.user.id : null;
+
+    if (!userId) {
+      const firstUser = await prisma.user.findFirst();
+      if (firstUser) userId = firstUser.id;
+    }
+
+    if (!userId) {
+      // No user found, still allow call (guest mode)
+      return res.status(200).json({ success: true, allowed: true, newCredits: null });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      return res.status(200).json({ success: true, allowed: true, newCredits: null });
+    }
+
+    if (user.credits < 1) {
+      return res.status(400).json({
+        success: false,
+        allowed: false,
+        message: `Insufficient credits! You need at least 1 credit to reveal a phone number. You have ${user.credits} credits.`,
+      });
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { credits: { decrement: 1 } },
+    });
+
+    return res.status(200).json({
+      success: true,
+      allowed: true,
+      newCredits: updatedUser.credits,
+      message: `1 credit used. Remaining: ${updatedUser.credits}`,
+    });
+  } catch (error) {
+    console.error("Error tracking call:", error);
+    // On error, still allow call (don't block user)
+    return res.status(200).json({ success: true, allowed: true, newCredits: null });
+  }
+};
