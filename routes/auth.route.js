@@ -11,7 +11,8 @@ import {
   changePasswordController,
   resetPasswordController,
   logoutController,
-  getMeController
+  getMeController,
+  updateAlertsController
 } from "../controllers/auth.controller.js";
 import authMiddleware from "../middlewares/auth.middleware.js";
 
@@ -29,5 +30,6 @@ router.post("/reset-password", resetPasswordController);
 router.put("/change-password", authMiddleware, changePasswordController)
 router.delete("/logout", authMiddleware, logoutController)
 router.get("/me", authMiddleware, getMeController)
+router.put("/me/alerts", authMiddleware, updateAlertsController)
 
 export default router;

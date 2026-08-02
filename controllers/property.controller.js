@@ -296,3 +296,68 @@ export const featureAd = async (req, res) => {
     return res.status(500).json({ success: false, message: "Failed to promote ad." });
   }
 };
+
+/**
+ * Tracks a property view for the authenticated user.
+ * Called from the frontend whenever a user opens a property listing.
+ */
+export const trackPropertyView = async (req, res) => {
+  try {
+    const { propertyId } = req.params;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const parsedPropertyId = parseInt(propertyId);
+    if (isNaN(parsedPropertyId)) {
+      return res.status(400).json({ success: false, message: "Invalid property ID" });
+    }
+
+    // Upsert: avoid duplicate entries in quick succession (same user + property within 1 hour)
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const existing = await prisma.viewedProperty.findFirst({
+      where: {
+        userId,
+        propertyId: parsedPropertyId,
+        viewedAt: { gte: oneHourAgo },
+      },
+    });
+
+    if (!existing) {
+      await prisma.viewedProperty.create({
+        data: { userId, propertyId: parsedPropertyId },
+      });
+    }
+
+    return res.status(200).json({ success: true, message: "View tracked" });
+  } catch (error) {
+    console.error("Track view error:", error);
+    return res.status(500).json({ success: false, message: "Failed to track view." });
+  }
+};
+
+export const getPropertyStats = async (req, res) => {
+  try {
+    const propertiesCount = await prisma.property.count();
+    const usersCount = await prisma.user.count();
+    // Use the count of viewed properties (or another metric) for happy clients, or just a multiple of properties/users if they want some logic, but let's just return exact database facts. Let's use total active listings for "Properties Sold" just as a placeholder since we don't track sold status.
+    // For clients, we could count distinct users who have viewed properties.
+    const clientsCount = await prisma.viewedProperty.groupBy({
+      by: ['userId'],
+    }).then(res => res.length);
+
+    res.status(200).json({
+      success: true,
+      stats: {
+        propertiesSold: propertiesCount,
+        agentsOnline: usersCount,
+        happyClients: clientsCount > 0 ? clientsCount : usersCount
+      }
+    });
+  } catch (error) {
+    console.error("Stats fetch error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch stats." });
+  }
+};

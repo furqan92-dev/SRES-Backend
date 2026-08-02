@@ -40,6 +40,24 @@ model User {
   stripeCustomerId String? @unique
   subscriptions   Subscription[]
   properties      Property[]
+  viewedProperties ViewedProperty[]
+  adCredits       Int      @default(0)
+  hotCredits      Int      @default(0)
+  superHotCredits Int      @default(0)
+  emailRecs       Boolean  @default(true)
+  emailFrequency  String   @default("Auto")
+  viewedProps     Boolean  @default(true)
+  viewedFrequency String   @default("Weekly")
+  lastEmailSentAt      DateTime?
+  lastViewedEmailSentAt DateTime?
+}
+
+model ViewedProperty {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  propertyId Int
+  viewedAt   DateTime @default(now())
 }
 
 model Property {
@@ -67,6 +85,7 @@ model Property {
   user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   boostScore         Int      @default(0)
   isFeatured         Boolean  @default(false)
+  analytics          PropertyAnalytics[]
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 }
@@ -115,3 +134,11 @@ model Notification {
   status    String   @default("pending") // "pending", "accepted", "declined"
   createdAt DateTime @default(now())
 }
+
+model PropertyAnalytics {
+  id         Int      @id @default(autoincrement())
+  propertyId Int
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  eventType  String   // "VIEW", "CLICK", "LEAD", "CALL", "WHATSAPP", "SMS", "EMAIL"
+  createdAt  DateTime @default(now())
+}

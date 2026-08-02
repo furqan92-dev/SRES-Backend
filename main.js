@@ -10,6 +10,7 @@ import creditsRouter from "./routes/credits.route.js";
 import propertyRouter from "./routes/property.route.js";
 import aiRouter from "./routes/ai.route.js";
 import { handlePaymentWebhook } from "./controllers/payment.controller.js";
+import { startAlertScheduler } from "./services/alertScheduler.service.js";
 import passport from "passport";
 import session from "express-session";
 import helmet from "helmet";
@@ -55,6 +56,8 @@ app.post("/api/v1/webhook/stripe", express.raw({type: 'application/json'}), hand
 const startServer = async () => {
   const server = app.listen(PORT, () => {
     console.log(`🚀 Server is running on port ${PORT}`);
+    // Start the alert email scheduler
+    startAlertScheduler();
   });
 
   server.on('error', (error) => {

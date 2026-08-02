@@ -443,7 +443,11 @@ const getMeController = async (req, res) => {
         credits: true,
         totalCredits: true,
         planName: true,
-        stripeCustomerId: true
+        stripeCustomerId: true,
+        emailRecs: true,
+        emailFrequency: true,
+        viewedProps: true,
+        viewedFrequency: true
       }
     });
 
@@ -454,6 +458,26 @@ const getMeController = async (req, res) => {
     return res.status(200).json({ success: true, user });
   } catch (err) {
     console.error("GetMe Error:", err);
+    return res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+}
+
+const updateAlertsController = async (req, res) => {
+  try {
+    const { emailRecs, emailFrequency, viewedProps, viewedFrequency } = req.body;
+    const updatedUser = await prisma.user.update({
+      where: { id: req.user.id },
+      data: {
+        emailRecs: typeof emailRecs === 'boolean' ? emailRecs : undefined,
+        emailFrequency: emailFrequency || undefined,
+        viewedProps: typeof viewedProps === 'boolean' ? viewedProps : undefined,
+        viewedFrequency: viewedFrequency || undefined,
+      }
+    });
+
+    return res.status(200).json({ success: true, message: "Alerts updated successfully", user: updatedUser });
+  } catch (err) {
+    console.error("Update Alerts Error:", err);
     return res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 }
@@ -470,5 +494,6 @@ export {
   changePasswordController,
   resetPasswordController,
   logoutController,
-  getMeController
+  getMeController,
+  updateAlertsController
 };

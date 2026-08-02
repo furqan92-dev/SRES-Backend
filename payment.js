@@ -13,7 +13,7 @@ async function runPaymentSimulation() {
       name: "Diamond Plan",
     });
 
-    // 2. Cnotreate Price
+    // 2. Create Price
     const price = await stripe.prices.create({
       unit_amount: 5000,
       currency: "usd",
